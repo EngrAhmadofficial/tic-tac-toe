@@ -5,10 +5,11 @@ on:
     branches: [ main, ci ]
   pull_request:
     branches: [ main, ci ]
+  workflow_dispatch: {}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -27,3 +28,29 @@ jobs:
       - name: Run tests
         run: mvn -B test
 
+  docker:
+    needs: build
+    if: github.ref == 'refs/heads/ci'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${GITHUB_REPOSITORY##*/}:$GITHUB_SHA .
+
+      - name: Login to DockerHub
+        if: secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image to DockerHub
+        if: secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN
+        run: |
+          IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/tic-tac-toe:ci-$GITHUB_SHA
+          docker tag ${GITHUB_REPOSITORY##*/}:$GITHUB_SHA $IMAGE_NAME
+          docker push $IMAGE_NAME
